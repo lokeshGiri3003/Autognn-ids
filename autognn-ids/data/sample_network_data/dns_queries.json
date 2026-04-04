@@ -1,0 +1,37 @@
+[
+  {"timestamp":"2025-01-15T10:00:01Z","client_ip":"192.168.30.10","query":"www.company.com","query_type":"A","response_ip":"93.184.216.34","response_code":"NOERROR","ttl":3600},
+  {"timestamp":"2025-01-15T10:00:02Z","client_ip":"192.168.30.11","query":"mail.company.com","query_type":"A","response_ip":"93.184.216.35","response_code":"NOERROR","ttl":3600},
+  {"timestamp":"2025-01-15T10:00:05Z","client_ip":"192.168.10.10","query":"updates.ubuntu.com","query_type":"A","response_ip":"91.189.91.39","response_code":"NOERROR","ttl":1800},
+  {"timestamp":"2025-01-15T10:00:10Z","client_ip":"192.168.10.20","query":"repo.mysql.com","query_type":"A","response_ip":"23.222.27.185","response_code":"NOERROR","ttl":300},
+  {"timestamp":"2025-01-15T10:01:00Z","client_ip":"192.168.30.12","query":"docs.google.com","query_type":"A","response_ip":"142.250.190.46","response_code":"NOERROR","ttl":300},
+  {"timestamp":"2025-01-15T10:01:30Z","client_ip":"192.168.30.13","query":"github.com","query_type":"A","response_ip":"140.82.121.3","response_code":"NOERROR","ttl":60},
+  {"timestamp":"2025-01-15T10:02:00Z","client_ip":"192.168.20.10","query":"api.company.com","query_type":"A","response_ip":"192.168.10.10","response_code":"NOERROR","ttl":60},
+  {"timestamp":"2025-01-15T10:02:05Z","client_ip":"192.168.20.20","query":"db.internal","query_type":"A","response_ip":"192.168.10.20","response_code":"NOERROR","ttl":60},
+
+  {"timestamp":"2025-01-15T10:05:00Z","client_ip":"192.168.30.99","query":"a7x9k2m.baddomain.xyz","query_type":"A","response_ip":"198.51.100.50","response_code":"NOERROR","ttl":30},
+  {"timestamp":"2025-01-15T10:05:05Z","client_ip":"192.168.30.99","query":"b3f8j1p.baddomain.xyz","query_type":"A","response_ip":"198.51.100.51","response_code":"NOERROR","ttl":30},
+  {"timestamp":"2025-01-15T10:05:10Z","client_ip":"192.168.30.99","query":"c9d2w5n.baddomain.xyz","query_type":"A","response_ip":"198.51.100.52","response_code":"NOERROR","ttl":30},
+  {"timestamp":"2025-01-15T10:05:15Z","client_ip":"192.168.30.99","query":"d4e7h8q.baddomain.xyz","query_type":"A","response_ip":"198.51.100.53","response_code":"NOERROR","ttl":30},
+  {"timestamp":"2025-01-15T10:05:20Z","client_ip":"192.168.30.99","query":"e1k6m3r.baddomain.xyz","query_type":"A","response_ip":"198.51.100.54","response_code":"NOERROR","ttl":30},
+  {"timestamp":"2025-01-15T10:05:25Z","client_ip":"192.168.30.99","query":"f5n8p2s.baddomain.xyz","query_type":"A","response_ip":"198.51.100.55","response_code":"NOERROR","ttl":30},
+
+  {"timestamp":"2025-01-15T10:06:00Z","client_ip":"192.168.30.100","query":"c2-server.evil.net","query_type":"A","response_ip":"203.0.113.50","response_code":"NOERROR","ttl":60},
+  {"timestamp":"2025-01-15T10:06:30Z","client_ip":"192.168.30.100","query":"c2-server.evil.net","query_type":"A","response_ip":"203.0.113.50","response_code":"NOERROR","ttl":60},
+  {"timestamp":"2025-01-15T10:07:00Z","client_ip":"192.168.30.100","query":"c2-server.evil.net","query_type":"A","response_ip":"203.0.113.50","response_code":"NOERROR","ttl":60},
+  {"timestamp":"2025-01-15T10:07:30Z","client_ip":"192.168.30.100","query":"c2-server.evil.net","query_type":"A","response_ip":"203.0.113.50","response_code":"NOERROR","ttl":60},
+
+  {"timestamp":"2025-01-15T10:08:00Z","client_ip":"192.168.30.100","query":"exfil-drop.evil.net","query_type":"TXT","response_ip":"","response_code":"NOERROR","ttl":10},
+  {"timestamp":"2025-01-15T10:08:05Z","client_ip":"192.168.30.100","query":"data1.exfil-drop.evil.net","query_type":"TXT","response_ip":"","response_code":"NOERROR","ttl":10},
+  {"timestamp":"2025-01-15T10:08:10Z","client_ip":"192.168.30.100","query":"data2.exfil-drop.evil.net","query_type":"TXT","response_ip":"","response_code":"NOERROR","ttl":10},
+
+  {"timestamp":"2025-01-15T10:09:00Z","client_ip":"192.168.30.99","query":"192.168.10.10.in-addr.arpa","query_type":"PTR","response_ip":"","response_code":"NOERROR","ttl":3600},
+  {"timestamp":"2025-01-15T10:09:01Z","client_ip":"192.168.30.99","query":"192.168.10.20.in-addr.arpa","query_type":"PTR","response_ip":"","response_code":"NOERROR","ttl":3600},
+  {"timestamp":"2025-01-15T10:09:02Z","client_ip":"192.168.30.99","query":"192.168.20.10.in-addr.arpa","query_type":"PTR","response_ip":"","response_code":"NOERROR","ttl":3600},
+  {"timestamp":"2025-01-15T10:09:03Z","client_ip":"192.168.30.99","query":"192.168.20.20.in-addr.arpa","query_type":"PTR","response_ip":"","response_code":"NOERROR","ttl":3600},
+
+  {"timestamp":"2025-01-15T10:10:00Z","client_ip":"192.168.30.10","query":"slack.com","query_type":"A","response_ip":"34.226.134.26","response_code":"NOERROR","ttl":60},
+  {"timestamp":"2025-01-15T10:11:00Z","client_ip":"192.168.30.11","query":"internal.company.com","query_type":"A","response_ip":"192.168.10.10","response_code":"NOERROR","ttl":300},
+  {"timestamp":"2025-01-15T10:12:00Z","client_ip":"192.168.30.99","query":"nonexistent-server.xyz","query_type":"A","response_ip":"","response_code":"NXDOMAIN","ttl":0},
+  {"timestamp":"2025-01-15T10:12:01Z","client_ip":"192.168.30.99","query":"another-fake.xyz","query_type":"A","response_ip":"","response_code":"NXDOMAIN","ttl":0},
+  {"timestamp":"2025-01-15T10:12:02Z","client_ip":"192.168.30.99","query":"doesnt-exist.abc","query_type":"A","response_ip":"","response_code":"NXDOMAIN","ttl":0}
+]

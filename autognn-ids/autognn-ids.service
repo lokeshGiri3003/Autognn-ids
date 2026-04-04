@@ -1,0 +1,26 @@
+[Unit]
+Description=AutoGNN-IDS - GNN-Based Network Intrusion Detection System
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/opt/autognn-ids
+Environment="PATH=/opt/autognn-ids/.venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="AUTOGNN_USE_SAMPLE=false"
+ExecStart=/opt/autognn-ids/.venv/bin/python -m uvicorn api.fastapi_server:app --host 0.0.0.0 --port 8000
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=autognn-ids
+
+# Security hardening
+NoNewPrivileges=false
+ProtectSystem=false
+ReadOnlyDirectories=/proc/net
+
+[Install]
+WantedBy=multi-user.target
