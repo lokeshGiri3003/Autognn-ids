@@ -1,0 +1,30 @@
+Based on the project's codebase, here are the shell shell commands available to set up, operate, and control the AutoGNN-IDS system:
+
+1. Setup & Environment
+Run these commands from the project root (~/GNN/autognn-ids):
+
+Run Setup Script: ./setup.sh (Initializes the virtual environment, installs dependencies, and creates the SQLite database)
+Install as a Systemd Service: ./setup.sh --install-service (Sets up AutoGNN-IDS to run as a background service)
+Activate Virtual Environment: source .venv/bin/activate
+2. AutoGNN-IDS Control CLI (autognn_ctl.py)
+This script acts as the main interface for a network administrator to manage the background engine's machine learning lifecycle:
+
+python autognn_ctl.py status — Display the current system status (mode, baselines collected, detection cycles).
+python autognn_ctl.py baseline start — Tell the engine to begin collecting normal traffic snapshots to learn the network's baseline.
+python autognn_ctl.py baseline stop — Stop capturing baseline traffic snapshots.
+python autognn_ctl.py baseline clear — Delete all previously collected baselines.
+python autognn_ctl.py train — Train the GNN model using the gathered baseline data.
+python autognn_ctl.py detect — Activate detection mode. The GNN will begin scoring live network traffic in 30-second windows.
+python autognn_ctl.py retrain — Wipes old baselines and restarts the baseline collection phase from scratch.
+python autognn_ctl.py stop — Halts both baseline collection and detection (sets the engine to 'stopped' mode).
+3. Server Initialization (Pending implementation)
+Once the API and Dashboard components are built out, these are the commands designated to run them:
+
+Start the FastAPI Backend: python -m uvicorn api.fastapi_server:app --host 0.0.0.0 --port 8000
+Start the Streamlit GUI: streamlit run dashboard/streamlit_app.py --server.port 8501
+4. Configuration Environment Variables
+You can prefix commands with environment variables to override default settings. For example:
+
+export AUTOGNN_USE_SAMPLE=true (Force the system to use sample data instead of real system logs)
+export AUTOGNN_SYSLOG_PATH=/var/log/syslog (Define a custom path to parse syslog)
+export AUTOGNN_MIN_BASELINES=10 (Change how many baseline snapshots are required before you can train)
