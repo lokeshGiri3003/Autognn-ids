@@ -44,7 +44,7 @@ pip install --upgrade pip setuptools wheel -q
 # ─── Install Dependencies ────────────────────────────────
 echo ""
 echo "[3/5] Installing dependencies..."
-pip install -r "$INSTALL_DIR/requirements.txt" -q
+pip install -r "$INSTALL_DIR/requirements.txt" -v
 echo "  Dependencies installed."
 
 # ─── Initialize Database ─────────────────────────────────
