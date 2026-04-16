@@ -14,7 +14,7 @@ from typing import Optional
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from config import LOG_PATHS, SAMPLE_DATA_DIR, USE_SAMPLE_DATA, OUI_DATABASE
+from config import LOG_PATHS, OUI_DATABASE
 
 logger = logging.getLogger("autognn.arp")
 
@@ -28,19 +28,6 @@ class ARPMonitor:
         self.known_macs: set[str] = set()
         self.new_devices: list[dict] = []
 
-    def parse_sample_data(self) -> list[dict]:
-        """Load ARP table from sample JSON."""
-        sample_file = SAMPLE_DATA_DIR / "arp_table.json"
-        if not sample_file.exists():
-            logger.warning(f"Sample ARP data not found: {sample_file}")
-            return []
-
-        with open(sample_file) as f:
-            self.entries = json.load(f)
-
-        logger.info(f"Loaded {len(self.entries)} ARP entries from sample data")
-        self._process_entries()
-        return self.entries
 
     def parse_proc_arp(self) -> list[dict]:
         """Read /proc/net/arp (Linux kernel ARP cache)."""
@@ -178,13 +165,10 @@ class ARPMonitor:
 
     def discover(self) -> dict:
         """Run discovery: returns devices dict."""
-        if USE_SAMPLE_DATA:
-            self.parse_sample_data()
+        # Try /proc/net/arp first, fall back to arp command
+        if Path(LOG_PATHS["arp"]).exists():
+            self.parse_proc_arp()
         else:
-            # Try /proc/net/arp first, fall back to arp command
-            if Path(LOG_PATHS["arp"]).exists():
-                self.parse_proc_arp()
-            else:
-                self.parse_arp_command()
+            self.parse_arp_command()
 
         return self.devices

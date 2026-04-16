@@ -188,6 +188,18 @@ def run_training_mode(state: dict) -> dict:
 
     # Save trainer state
     trainer.save_state()
+    
+    # Save a named copy if requested
+    if "target_model_name" in state:
+        target_name = state["target_model_name"]
+        try:
+            import shutil
+            target_path = MODEL_DIR / f"{target_name}.pt"
+            shutil.copy2(MODEL_DIR / "trainer_state.pt", target_path)
+            logger.info(f"Target model '{target_name}' saved to {target_path}")
+        except Exception as e:
+            logger.error(f"Failed to save target model '{target_name}': {e}")
+        del state["target_model_name"]  # clear it
 
     # Update system state
     state["mode"] = "detection"
@@ -205,6 +217,78 @@ def run_training_mode(state: dict) -> dict:
         f"Loss: {state['training_loss']}, "
         f"Threshold: {state['threshold']}, "
         f"Duration: {state['training_duration']}s. "
+        f"Switching to detection mode."
+    )
+
+    return state
+
+
+def run_upgrading_mode(state: dict) -> dict:
+    """Upgrade existing model with new baselines."""
+    logger.info("Upgrading mode: fine-tuning existing model...")
+
+    baselines = load_baselines()
+    if not baselines:
+        logger.error("No newly collected baselines found!")
+        state["mode"] = "stopped"
+        return state
+
+    model = AutoGNNIDS()
+    feature_extractor = FeatureExtractor()
+    trainer = Trainer(model, feature_extractor)
+
+    if not trainer.load_state():
+        logger.error("No existing model to upgrade!")
+        state["mode"] = "stopped"
+        return state
+
+    for i, snapshot in enumerate(baselines):
+        success = trainer.add_baseline_snapshot(snapshot)
+        if success:
+            logger.info(f"  Loaded baseline {i + 1}/{len(baselines)}")
+
+    if len(trainer.baseline_snapshots) == 0:
+        logger.error("Failed to load any valid baselines for upgrading")
+        state["mode"] = "stopped"
+        return state
+
+    # Reduce learning rate for fine-tuning
+    for param_group in trainer.optimizer.param_groups:
+        param_group['lr'] *= 0.5
+
+    result = trainer.train(verbose=True)
+
+    if "error" in result:
+        logger.error(f"Upgrading failed: {result['error']}")
+        state["mode"] = "stopped"
+        return state
+
+    trainer.save_state()
+
+    if "target_model_name" in state:
+        target_name = state["target_model_name"]
+        try:
+            import shutil
+            target_path = MODEL_DIR / f"{target_name}.pt"
+            shutil.copy2(MODEL_DIR / "trainer_state.pt", target_path)
+            logger.info(f"Target model '{target_name}' saved to {target_path}")
+        except Exception as e:
+            logger.error(f"Failed to save target model '{target_name}': {e}")
+        del state["target_model_name"]
+
+    state["mode"] = "detection"
+    state["last_trained"] = datetime.utcnow().isoformat() + "Z"
+    state["training_loss"] = round(result.get("final_loss", 0), 4)
+    state["threshold"] = round(result.get("threshold", 0.5), 4)
+    state["model_path"] = result.get("model_path", "")
+    state["training_epochs"] = result.get("epochs_trained", 0)
+    state["detection_cycles"] = 0
+    state["total_alerts"] = 0
+
+    logger.info(
+        f"Upgrading complete! "
+        f"Loss: {state['training_loss']}, "
+        f"Threshold: {state['threshold']}. "
         f"Switching to detection mode."
     )
 
@@ -317,6 +401,17 @@ def main():
                 save_state(state)
 
                 # Initialize detection components after training
+                if state["mode"] == "detection":
+                    model = AutoGNNIDS()
+                    feature_extractor = FeatureExtractor()
+                    trainer = Trainer(model, feature_extractor)
+                    trainer.load_state()
+                    explainer = AttackExplainer(model, feature_extractor)
+
+            elif mode == "upgrading":
+                state = run_upgrading_mode(state)
+                save_state(state)
+
                 if state["mode"] == "detection":
                     model = AutoGNNIDS()
                     feature_extractor = FeatureExtractor()

@@ -13,7 +13,7 @@ from typing import Optional
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from config import LOG_PATHS, SAMPLE_DATA_DIR, USE_SAMPLE_DATA
+from config import LOG_PATHS
 
 logger = logging.getLogger("autognn.lldp")
 
@@ -26,19 +26,6 @@ class LLDPParser:
         self.devices: dict[str, dict] = {}
         self.links: list[dict] = []
 
-    def parse_sample_data(self) -> list[dict]:
-        """Load from sample JSON data."""
-        sample_file = SAMPLE_DATA_DIR / "lldp_captures.json"
-        if not sample_file.exists():
-            logger.warning(f"Sample LLDP data not found: {sample_file}")
-            return []
-
-        with open(sample_file) as f:
-            self.neighbors = json.load(f)
-
-        logger.info(f"Loaded {len(self.neighbors)} LLDP neighbor records from sample data")
-        self._process_neighbors()
-        return self.neighbors
 
     def parse_lldpcli_json(self, filepath: Optional[str] = None) -> list[dict]:
         """
@@ -190,15 +177,12 @@ class LLDPParser:
 
     def discover(self) -> tuple[dict, list]:
         """Run discovery: returns (devices, links)."""
-        if USE_SAMPLE_DATA:
-            self.parse_sample_data()
+        # Try lldpcli JSON first, fall back to log parsing
+        if Path(LOG_PATHS["lldp_export"]).exists():
+            self.parse_lldpcli_json()
+        elif Path(LOG_PATHS["lldp_log"]).exists():
+            self.parse_log_file()
         else:
-            # Try lldpcli JSON first, fall back to log parsing
-            if Path(LOG_PATHS["lldp_export"]).exists():
-                self.parse_lldpcli_json()
-            elif Path(LOG_PATHS["lldp_log"]).exists():
-                self.parse_log_file()
-            else:
-                logger.warning("No LLDP data source available")
+            logger.warning("No LLDP data source available")
 
         return self.devices, self.links

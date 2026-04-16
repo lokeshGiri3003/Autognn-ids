@@ -15,7 +15,7 @@ from typing import Optional
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from config import LOG_PATHS, SAMPLE_DATA_DIR, USE_SAMPLE_DATA
+from config import LOG_PATHS
 
 logger = logging.getLogger("autognn.netflow")
 
@@ -34,19 +34,6 @@ class NetFlowCollector:
         })
         self._processed_files: set[str] = set()
 
-    def parse_sample_data(self) -> list[dict]:
-        """Load NetFlow records from sample JSON."""
-        sample_file = SAMPLE_DATA_DIR / "netflow_records.json"
-        if not sample_file.exists():
-            logger.warning(f"Sample NetFlow data not found: {sample_file}")
-            return []
-
-        with open(sample_file) as f:
-            self.flows = json.load(f)
-
-        logger.info(f"Loaded {len(self.flows)} NetFlow records from sample data")
-        self._process_flows()
-        return self.flows
 
     def parse_flow_directory(self, dirpath: Optional[str] = None) -> list[dict]:
         """
@@ -222,9 +209,5 @@ class NetFlowCollector:
 
     def discover(self) -> tuple[list, dict]:
         """Run discovery: returns (edges, device_traffic)."""
-        if USE_SAMPLE_DATA:
-            self.parse_sample_data()
-        else:
-            self.parse_flow_directory()
-
+        self.parse_flow_directory()
         return self.edges, self.get_device_traffic()

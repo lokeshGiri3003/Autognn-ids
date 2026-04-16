@@ -16,7 +16,7 @@ from typing import Optional
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from config import LOG_PATHS, SAMPLE_DATA_DIR, USE_SAMPLE_DATA
+from config import LOG_PATHS
 
 logger = logging.getLogger("autognn.syslog")
 
@@ -59,19 +59,6 @@ class SyslogParser:
         self.device_events: dict[str, list] = defaultdict(list)
         self._file_position: int = 0  # For tailing
 
-    def parse_sample_data(self) -> list[dict]:
-        """Load from sample syslog JSON."""
-        sample_file = SAMPLE_DATA_DIR / "syslog_events.json"
-        if not sample_file.exists():
-            logger.warning(f"Sample syslog data not found: {sample_file}")
-            return []
-
-        with open(sample_file) as f:
-            self.events = json.load(f)
-
-        logger.info(f"Loaded {len(self.events)} syslog events from sample data")
-        self._process_events()
-        return self.events
 
     def tail_syslog(self, filepath: Optional[str] = None, max_lines: int = 1000) -> list[dict]:
         """
@@ -311,9 +298,5 @@ class SyslogParser:
 
     def discover(self) -> tuple[list, dict]:
         """Run discovery: returns (security_events, suspicious_ips)."""
-        if USE_SAMPLE_DATA:
-            self.parse_sample_data()
-        else:
-            self.tail_syslog()
-
+        self.tail_syslog()
         return self.security_events, self.get_suspicious_ips()

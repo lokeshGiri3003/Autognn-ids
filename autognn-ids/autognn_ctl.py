@@ -8,7 +8,12 @@ Usage:
     python autognn_ctl.py baseline start      Start collecting baseline data
     python autognn_ctl.py baseline stop       Stop collecting baseline data
     python autognn_ctl.py baseline clear      Clear all collected baselines
-    python autognn_ctl.py train               Train the model on collected baselines
+    python autognn_ctl.py train [name]        Train the model (optionally save as name)
+    python autognn_ctl.py upgrade [name]      Upgrade (fine-tune) existing model
+    python autognn_ctl.py model list          List saved models
+    python autognn_ctl.py model switch <name> Switch to a saved model
+    python autognn_ctl.py model save <name>   Save the active model under a new name
+    python autognn_ctl.py model delete <name> Delete a saved model
     python autognn_ctl.py detect              Switch to detection mode
     python autognn_ctl.py retrain             Collect new baselines + retrain
     python autognn_ctl.py stop                Stop the system
@@ -63,6 +68,7 @@ def print_status(state: dict):
         "stopped": "⏹️",
         "baseline": "📊",
         "training": "🧠",
+        "upgrading": "✨",
         "detection": "🛡️",
     }
 
@@ -199,7 +205,7 @@ def cmd_baseline_clear():
     print()
 
 
-def cmd_train():
+def cmd_train(model_name: str = None):
     """Train the model on collected baselines."""
     state = load_state()
 
@@ -218,12 +224,55 @@ def cmd_train():
         return
 
     state["mode"] = "training"
+    if model_name:
+        state["target_model_name"] = model_name
+    elif "target_model_name" in state:
+        del state["target_model_name"]
+        
     save_state(state)
 
     print(f"🧠 Training started on {count} snapshots...")
     print("   This will take ~2-5 minutes.")
     print()
     print("   The main process will pick up this command and train.")
+    print("   Check progress with:")
+    print("     python autognn_ctl.py status")
+    print()
+
+
+def cmd_upgrade(model_name: str = None):
+    """Upgrade (fine-tune) the existing model with collected baselines."""
+    state = load_state()
+
+    if state["mode"] == "baseline":
+        print("⚠️  Stop baseline collection first:")
+        print("     python autognn_ctl.py baseline stop")
+        return
+
+    # Check if a model exists
+    trainer_state_path = MODEL_DIR / "trainer_state.pt"
+    if not trainer_state_path.exists():
+        print("❌ No existing model found to upgrade. Use 'train' instead.")
+        return
+
+    count = state.get("baseline_count", 0)
+    if count == 0:
+        print("❌ No baseline data. Collect baselines first:")
+        print("     python autognn_ctl.py baseline start")
+        return
+
+    state["mode"] = "upgrading"
+    if model_name:
+        state["target_model_name"] = model_name
+    elif "target_model_name" in state:
+        del state["target_model_name"]
+        
+    save_state(state)
+
+    print(f"✨ Upgrading model using {count} new snapshots...")
+    print("   This will take ~1-3 minutes.")
+    print()
+    print("   The main process will pick up this command and upgrade.")
     print("   Check progress with:")
     print("     python autognn_ctl.py status")
     print()
@@ -280,6 +329,87 @@ def cmd_retrain():
     print()
 
 
+def cmd_model(args):
+    """Manage multiple named models."""
+    state = load_state()
+    trainer_state_path = MODEL_DIR / "trainer_state.pt"
+
+    if len(args) == 0:
+        print("Usage: python autognn_ctl.py model [list|switch|save|delete] <name>")
+        return
+
+    subcmd = args[0]
+
+    if subcmd == "list":
+        print("Available models:")
+        count = 0
+        for path in MODEL_DIR.glob("*.pt"):
+            if path.name == "trainer_state.pt" or path.name == "autognn_ids_model.pt":
+                continue
+            print(f"  - {path.stem}")
+            count += 1
+        if count == 0:
+            print("  (No saved models found)")
+        print()
+
+    elif subcmd == "switch":
+        if len(args) < 2:
+            print("Usage: python autognn_ctl.py model switch <name>")
+            return
+        name = args[1]
+        target_path = MODEL_DIR / f"{name}.pt"
+        if not target_path.exists():
+            print(f"❌ Model '{name}' not found at: {target_path}")
+            return
+        try:
+            import shutil
+            shutil.copy2(target_path, trainer_state_path)
+            print(f"✅ Switched to model '{name}'.")
+            
+            # Update state to reflect trained status
+            state["mode"] = "stopped"
+            state["last_trained"] = datetime.utcnow().isoformat() + "Z"
+            state["model_path"] = str(trainer_state_path)
+            state["baseline_count"] = 0
+            save_state(state)
+        except Exception as e:
+            print(f"❌ Error switching model: {e}")
+
+    elif subcmd == "save":
+        if len(args) < 2:
+            print("Usage: python autognn_ctl.py model save <name>")
+            return
+        name = args[1]
+        if not trainer_state_path.exists():
+            print("❌ No active model to save (trainer_state.pt not found). Train a model first.")
+            return
+        target_path = MODEL_DIR / f"{name}.pt"
+        try:
+            import shutil
+            shutil.copy2(trainer_state_path, target_path)
+            print(f"✅ Active model saved as '{name}'.")
+        except Exception as e:
+            print(f"❌ Error saving model: {e}")
+
+    elif subcmd == "delete":
+        if len(args) < 2:
+            print("Usage: python autognn_ctl.py model delete <name>")
+            return
+        name = args[1]
+        target_path = MODEL_DIR / f"{name}.pt"
+        if not target_path.exists():
+            print(f"❌ Model '{name}' not found.")
+            return
+        try:
+            target_path.unlink()
+            print(f"✅ Model '{name}' deleted.")
+        except Exception as e:
+            print(f"❌ Error deleting model '{name}': {e}")
+            
+    else:
+        print(f"Unknown model subcommand: {subcmd}")
+
+
 def cmd_stop():
     """Stop the system."""
     state = load_state()
@@ -309,7 +439,12 @@ def cmd_help():
     print("    baseline start      Start collecting baseline data")
     print("    baseline stop       Stop collecting baseline data")
     print("    baseline clear      Clear all collected baselines")
-    print("    train               Train the model on collected baselines")
+    print("    train [name]        Train the model (optionally save as name)")
+    print("    upgrade [name]      Upgrade (fine-tune) the existing model")
+    print("    model list          List saved models")
+    print("    model switch <name> Switch to a saved model (e.g., autognn)")
+    print("    model save <name>   Save the active model under a new name")
+    print("    model delete <name> Delete a saved model")
     print("    detect              Switch to detection mode")
     print("    retrain             Clear baselines and start fresh")
     print("    stop                Stop the system")
@@ -342,7 +477,13 @@ def main():
         else:
             print(f"Unknown: baseline {args[1]}")
     elif args[0] == "train":
-        cmd_train()
+        model_name = args[1] if len(args) > 1 else None
+        cmd_train(model_name)
+    elif args[0] == "upgrade":
+        model_name = args[1] if len(args) > 1 else None
+        cmd_upgrade(model_name)
+    elif args[0] == "model":
+        cmd_model(args[1:])
     elif args[0] == "detect":
         cmd_detect()
     elif args[0] == "retrain":

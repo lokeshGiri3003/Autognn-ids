@@ -8,12 +8,11 @@ from pathlib import Path
 # ─── Base Paths ───────────────────────────────────────────────
 BASE_DIR = Path(__file__).parent.resolve()
 DATA_DIR = BASE_DIR / "data"
-SAMPLE_DATA_DIR = DATA_DIR / "sample_network_data"
 MODEL_DIR = BASE_DIR / "models"
 DB_DIR = BASE_DIR / "db"
 
 # Create dirs
-for d in [DATA_DIR, SAMPLE_DATA_DIR, MODEL_DIR, DB_DIR]:
+for d in [DATA_DIR, MODEL_DIR, DB_DIR]:
     d.mkdir(parents=True, exist_ok=True)
 
 # ─── Log File Paths (Linux Server Defaults) ──────────────────
@@ -126,8 +125,7 @@ DASHBOARD_CONFIG = {
     "api_url": os.getenv("AUTOGNN_API_URL", "http://localhost:8000"),
 }
 
-# ─── Use Sample Data Mode ────────────────────────────────────
-USE_SAMPLE_DATA = os.getenv("AUTOGNN_USE_SAMPLE", "true").lower() == "true"
+
 
 # ─── Training Control ────────────────────────────────────────
 TRAINING_CONFIG = {
