@@ -16,7 +16,7 @@ from typing import Optional
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from config import LOG_PATHS, SAMPLE_DATA_DIR, USE_SAMPLE_DATA, DISCOVERY_CONFIG
+from config import LOG_PATHS, DISCOVERY_CONFIG
 
 logger = logging.getLogger("autognn.dns")
 
@@ -53,20 +53,6 @@ class DNSMonitor:
         self._file_position: int = 0
 
     # ─── Data Sources ────────────────────────────────────────
-
-    def parse_sample_data(self) -> list[dict]:
-        """Load DNS queries from sample JSON."""
-        sample_file = SAMPLE_DATA_DIR / "dns_queries.json"
-        if not sample_file.exists():
-            logger.warning(f"Sample DNS data not found: {sample_file}")
-            return []
-
-        with open(sample_file) as f:
-            self.queries = json.load(f)
-
-        logger.info(f"Loaded {len(self.queries)} DNS queries from sample data")
-        self._process_queries()
-        return self.queries
 
     def parse_log_file(self, filepath: Optional[str] = None,
                        max_lines: int = 5000) -> list[dict]:
@@ -547,22 +533,19 @@ class DNSMonitor:
 
     def discover(self) -> tuple[list, dict]:
         """Run discovery: returns (threat_indicators, suspicious_clients)."""
-        if USE_SAMPLE_DATA:
-            self.parse_sample_data()
-        else:
-            # Try log file first, then fall back to sniffing
-            log_found = False
-            for key in ["dns_query_log", "dns_dnsmasq_log", "dns_unbound_log"]:
-                if Path(LOG_PATHS.get(key, "")).exists():
-                    self.parse_log_file()
-                    log_found = True
-                    break
+        # Try log file first, then fall back to sniffing
+        log_found = False
+        for key in ["dns_query_log", "dns_dnsmasq_log", "dns_unbound_log"]:
+            if Path(LOG_PATHS.get(key, "")).exists():
+                self.parse_log_file()
+                log_found = True
+                break
 
-            if not log_found:
-                logger.warning(
-                    "No DNS log file found. Attempting passive sniff "
-                    "(requires root)..."
-                )
-                self.sniff_dns(timeout=DISCOVERY_CONFIG.get("dns_sniff_timeout", 10))
+        if not log_found:
+            logger.warning(
+                "No DNS log file found. Attempting passive sniff "
+                "(requires root)..."
+            )
+            self.sniff_dns(timeout=DISCOVERY_CONFIG.get("dns_sniff_timeout", 10))
 
         return self.threat_indicators, self.get_suspicious_clients()

@@ -15,7 +15,7 @@ from typing import Optional
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from config import LOG_PATHS, SAMPLE_DATA_DIR, USE_SAMPLE_DATA, OUI_DATABASE
+from config import LOG_PATHS, OUI_DATABASE
 
 logger = logging.getLogger("autognn.dhcp")
 
@@ -54,20 +54,6 @@ class DHCPMonitor:
         self._file_position: int = 0
 
     # ─── Data Sources ────────────────────────────────────────
-
-    def parse_sample_data(self) -> list[dict]:
-        """Load DHCP leases from sample JSON."""
-        sample_file = SAMPLE_DATA_DIR / "dhcp_leases.json"
-        if not sample_file.exists():
-            logger.warning(f"Sample DHCP data not found: {sample_file}")
-            return []
-
-        with open(sample_file) as f:
-            self.leases = json.load(f)
-
-        logger.info(f"Loaded {len(self.leases)} DHCP events from sample data")
-        self._process_leases()
-        return self.leases
 
     def parse_lease_file(self, filepath: Optional[str] = None) -> list[dict]:
         """
@@ -609,29 +595,26 @@ class DHCPMonitor:
         """
         Run discovery: returns (devices, threat_indicators, suspicious_clients).
         """
-        if USE_SAMPLE_DATA:
-            self.parse_sample_data()
-        else:
-            # Try lease file first, then log file, then sniffing
-            lease_found = False
-            for key in ["dhcp_leases_isc", "dhcp_leases_dnsmasq"]:
-                if Path(LOG_PATHS.get(key, "")).exists():
-                    self.parse_lease_file()
-                    lease_found = True
-                    break
+        # Try lease file first, then log file, then sniffing
+        lease_found = False
+        for key in ["dhcp_leases_isc", "dhcp_leases_dnsmasq"]:
+            if Path(LOG_PATHS.get(key, "")).exists():
+                self.parse_lease_file()
+                lease_found = True
+                break
 
-            log_found = False
-            for key in ["dhcp_log", "dhcp_log_alt"]:
-                if Path(LOG_PATHS.get(key, "")).exists():
-                    self.parse_log_file()
-                    log_found = True
-                    break
+        log_found = False
+        for key in ["dhcp_log", "dhcp_log_alt"]:
+            if Path(LOG_PATHS.get(key, "")).exists():
+                self.parse_log_file()
+                log_found = True
+                break
 
-            if not lease_found and not log_found:
-                logger.warning(
-                    "No DHCP data source found. Attempting passive sniff "
-                    "(requires root)..."
-                )
-                self.sniff_dhcp(timeout=30)
+        if not lease_found and not log_found:
+            logger.warning(
+                "No DHCP data source found. Attempting passive sniff "
+                "(requires root)..."
+            )
+            self.sniff_dhcp(timeout=30)
 
         return self.get_devices(), self.threat_indicators, self.get_suspicious_clients()

@@ -20,8 +20,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config import (
-    SQLITE_DB_PATH, DISCOVERY_CONFIG, USE_SAMPLE_DATA,
-    SAMPLE_DATA_DIR, OUI_DATABASE,
+    SQLITE_DB_PATH, DISCOVERY_CONFIG, OUI_DATABASE,
 )
 from network_discovery.lldp_parser import LLDPParser
 from network_discovery.arp_monitor import ARPMonitor
