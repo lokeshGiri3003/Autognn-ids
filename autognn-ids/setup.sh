@@ -1,6 +1,10 @@
 #!/bin/bash
 # AutoGNN-IDS Setup Script
 # Run this on your Linux server to set up the tool.
+#
+# Usage:
+#   sudo bash setup.sh                      # Standard setup
+#   sudo bash setup.sh --install-service    # Install as systemd service
 
 set -e
 
@@ -13,7 +17,129 @@ INSTALL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_DIR="$INSTALL_DIR/.venv"
 SERVICE_NAME="autognn-ids"
 
-# ─── Check Python ─────────────────────────────────────────
+# Parse arguments
+INSTALL_SERVICE=false
+
+# NOTE: Automated bridge setup has been removed for safety and portability.
+# Configure bridging manually on your host after setup if required.
+#
+# Manual bridge setup example (replace eth0/eth1 with your interfaces):
+#   sudo apt update && sudo apt install -y bridge-utils iptables-persistent
+#   sudo ip link add name br0 type bridge
+#   sudo ip link set eth0 master br0
+#   sudo ip link set eth1 master br0
+#   sudo ip link set br0 up
+#   sudo iptables -A FORWARD -j LOG --log-prefix "iptables: "
+#   sudo iptables-save | sudo tee /etc/iptables/rules.v4 > /dev/null
+#
+# Persist the bridge with your distro networking stack (netplan, ifupdown,
+# NetworkManager, or systemd-networkd).
+
+show_bridge_instructions() {
+    echo "  Manual bridge setup example (replace eth0/eth1 with your interfaces):"
+    echo ""
+    echo "    sudo apt update && sudo apt install -y bridge-utils iptables-persistent"
+    echo "    sudo ip link add name br0 type bridge"
+    echo "    sudo ip link set eth0 master br0"
+    echo "    sudo ip link set eth1 master br0"
+    echo "    sudo ip link set br0 up"
+    echo "    sudo iptables -A FORWARD -j LOG --log-prefix \"iptables: \""
+    echo "    sudo iptables-save | sudo tee /etc/iptables/rules.v4 > /dev/null"
+    echo ""
+    echo "  Persist bridge config using netplan, ifupdown, NetworkManager,"
+    echo "  or systemd-networkd for your distro."
+}
+
+# Function to display help
+show_help() {
+    echo ""
+    echo "══════════════════════════════════════════════════════"
+    echo "  AutoGNN-IDS Setup Script - Help"
+    echo "══════════════════════════════════════════════════════"
+    echo ""
+    echo "DESCRIPTION:"
+    echo "  Automated setup script for AutoGNN-IDS on a Linux server."
+    echo "  Installs Python dependencies, creates virtual environment,"
+    echo "  initializes database, and provides guidance for manual bridge"
+    echo "  configuration for network-wide intrusion detection."
+    echo ""
+    echo "USAGE:"
+    echo "  sudo bash setup.sh [OPTIONS]"
+    echo ""
+    echo "OPTIONS:"
+    echo "  -h, --help                Show this help message and exit"
+    echo "  --install-service         Install as systemd service for auto-start on boot"
+    echo ""
+    echo "EXAMPLES:"
+    echo ""
+    echo "  1. Standard setup (no bridge):"
+    echo "     sudo bash setup.sh"
+    echo ""
+    echo "  2. Setup and install as systemd service:"
+    echo "     sudo bash setup.sh --install-service"
+    echo ""
+    echo "REQUIREMENTS:"
+    echo "  • Root privileges (use sudo)"
+    echo "  • Python 3.10+"
+    echo ""
+    echo "WHAT IT DOES:"
+    echo "  ✓ Checks Python version (3.10+)"
+    echo "  ✓ Creates isolated Python virtual environment (.venv/)"
+    echo "  ✓ Installs required dependencies (PyTorch, FastAPI, Scapy, etc.)"
+    echo "  ✓ Initializes SQLite database with schema"
+    echo "  ✓ (Optional) Installs systemd service for auto-start"
+    echo "  ⓘ Bridge configuration is now manual (instructions in setup.sh comments)"
+    echo ""
+    echo "NEXT STEPS (after setup):"
+    echo "  1. Activate virtual environment:"
+    echo "     source ./.venv/bin/activate"
+    echo "  2. Collect baseline (1-24 hours of normal traffic):"
+    echo "     python autognn_ctl.py baseline start"
+    echo "  3. Train GNN model:"
+    echo "     python autognn_ctl.py train"
+    echo "  4. Start detection:"
+    echo "     python autognn_ctl.py detect"
+    echo "  5. Access dashboard:"
+    echo "     streamlit run dashboard/streamlit_app.py --server.port 8501"
+    echo ""
+    echo "TROUBLESHOOTING:"
+    echo "  • Bridge is manual: Check setup.sh comments for bridge steps"
+    echo "  • If permission denied: Make sure you use 'sudo'"
+    echo "  • For help with commands after setup: python autognn_ctl.py --help"
+    echo ""
+    show_bridge_instructions
+    echo ""
+    echo "══════════════════════════════════════════════════════"
+    echo ""
+}
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        --install-service)
+            INSTALL_SERVICE=true
+            shift
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo ""
+            echo "Usage: sudo bash setup.sh [OPTIONS]"
+            echo "For help: sudo bash setup.sh --help"
+            echo ""
+            exit 1
+            ;;
+    esac
+done
+
+# ─── Check if running as root ────────────────────────────
+if [ "$EUID" -ne 0 ]; then
+    echo "ERROR: This script must be run as root (use sudo)"
+    exit 1
+fi
+
 echo ""
 echo "[1/5] Checking Python 3.11+..."
 if command -v python3.11 &> /dev/null; then
@@ -132,34 +258,100 @@ print('  Database initialized: ' + db_path)
 # ─── Install systemd service (optional) ──────────────────
 echo ""
 echo "[5/5] systemd service setup..."
-if [ "\$1" = "--install-service" ]; then
-    sudo cp "$INSTALL_DIR/autognn-ids.service" /etc/systemd/system/
-    sudo sed -i "s|/opt/autognn-ids|$INSTALL_DIR|g" /etc/systemd/system/autognn-ids.service
-    sudo systemctl daemon-reload
-    sudo systemctl enable autognn-ids
-    echo "  Service installed. Start with: sudo systemctl start autognn-ids"
+if [ "$INSTALL_SERVICE" = true ]; then
+    if [ ! -f "$INSTALL_DIR/autognn-ids.service" ]; then
+        echo "  ⚠ Service file not found at $INSTALL_DIR/autognn-ids.service"
+        echo "  Creating default service file..."
+
+        cat > "$INSTALL_DIR/autognn-ids.service" << 'EOF'
+[Unit]
+Description=AutoGNN-IDS (Graph Neural Network Intrusion Detection)
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=__INSTALL_DIR__
+ExecStart=/usr/bin/python3 __INSTALL_DIR__/main.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=autognn-ids
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    fi
+
+    cp "$INSTALL_DIR/autognn-ids.service" /etc/systemd/system/
+    sed -i "s|__INSTALL_DIR__|$INSTALL_DIR|g" /etc/systemd/system/autognn-ids.service
+    systemctl daemon-reload
+    systemctl enable autognn-ids
+    echo "  ✓ Service installed and enabled"
+    echo ""
+    echo "  To start the service now:"
+    echo "    sudo systemctl start autognn-ids"
+    echo ""
+    echo "  To view logs:"
+    echo "    sudo journalctl -u autognn-ids -f"
 else
-    echo "  Skipped. Run with --install-service to install systemd service."
+    echo "  ⓘ Skipped (optional). To install later:"
+    echo "    sudo bash setup.sh --install-service"
 fi
 
 echo ""
 echo "══════════════════════════════════════════════════════"
-echo "  Setup complete!"
+echo "  ✅ Setup Complete!"
+echo "══════════════════════════════════════════════════════"
 echo ""
-echo "  Quick start:"
-echo "    source $VENV_DIR/bin/activate"
+
+if [ "$INSTALL_SERVICE" = true ]; then
+    echo "  🚀 Systemd Service Installed"
+    echo "    Status: Enabled for auto-start on boot"
+    echo "    Start: sudo systemctl start autognn-ids"
+    echo ""
+fi
+
+echo "  📋 Next Steps:"
 echo ""
-echo "    # Start API server:"
-echo "    python -m uvicorn api.fastapi_server:app --host 0.0.0.0 --port 8000"
+echo "  1️⃣  Activate virtual environment:"
+echo "     source $VENV_DIR/bin/activate"
 echo ""
-echo "    # Start dashboard (in another terminal):"
-echo "    streamlit run dashboard/streamlit_app.py --server.port 8501"
+echo "  2️⃣  Use sample data (for testing):"
+echo "     export AUTOGNN_USE_SAMPLE=true"
+echo "     python autognn_ctl.py baseline start"
 echo ""
-echo "    # Use sample data (default):"
-echo "    export AUTOGNN_USE_SAMPLE=true"
+echo "  3️⃣  For real network monitoring, configure bridge manually"
+echo "     (see bridge instructions in setup.sh comments near the top)."
 echo ""
-echo "    # Use real server logs:"
-echo "    export AUTOGNN_USE_SAMPLE=false"
-echo "    export AUTOGNN_SYSLOG_PATH=/var/log/syslog"
-echo "    export AUTOGNN_NETFLOW_DIR=/var/log/netflow/"
+show_bridge_instructions
+echo ""
+
+echo "  📚 Commands Reference:"
+echo ""
+echo "     # Baseline collection (1-24 hours):"
+echo "     python autognn_ctl.py baseline start"
+echo "     python autognn_ctl.py baseline stop"
+echo ""
+echo "     # Model training:"
+echo "     python autognn_ctl.py train [model_name]"
+echo ""
+echo "     # Start detection (continuous):"
+echo "     python autognn_ctl.py detect"
+echo ""
+echo "     # Check system status:"
+echo "     python autognn_ctl.py status"
+echo ""
+echo "     # View alerts:"
+echo "     python autognn_ctl.py alerts"
+echo ""
+echo "     # Model management:"
+echo "     python autognn_ctl.py model list"
+echo "     python autognn_ctl.py model switch <name>"
+echo ""
+echo "  🔗 API Documentation:"
+echo "     http://localhost:8000/docs"
+echo ""
 echo "══════════════════════════════════════════════════════"
