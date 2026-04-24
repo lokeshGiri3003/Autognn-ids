@@ -1,0 +1,75 @@
+# AutoGNN-IDS Service Configuration
+# ===================================
+#
+# Copy this file to one of these locations to customize the service:
+#   - /etc/autognn-ids/autognn-ids.conf (system-wide, requires root)
+#   - ~/.autognn-ids/autognn-ids.conf (per-user, no root needed)
+#
+# Then restart the service:
+#   sudo systemctl restart autognn-ids
+#
+# OR set variables directly:
+#   AUTOGNN_INSTALL_DIR=/home/user/autognn-ids systemctl restart autognn-ids
+
+# ─── Installation Directory ───────────────────────────────────
+# Path to where AutoGNN-IDS is installed
+# Default: /opt/autognn-ids
+# Examples:
+#   /opt/autognn-ids                          # Standard system installation
+#   /home/user/autognn-ids                    # User installation
+#   /srv/autognn-ids                          # Server installation
+AUTOGNN_INSTALL_DIR=/opt/autognn-ids
+
+# ─── Data & Model Storage ─────────────────────────────────────
+# Override data directory (defaults to ${AUTOGNN_INSTALL_DIR}/data)
+# Useful for using external storage or shared data
+# AUTOGNN_DATA_DIR=/mnt/data/autognn-ids/data
+# AUTOGNN_MODEL_DIR=/mnt/data/autognn-ids/models
+# AUTOGNN_DB_DIR=/mnt/data/autognn-ids/db
+
+# ─── Network Monitoring ───────────────────────────────────────
+# Use real network data (false) or sample data (true)
+AUTOGNN_USE_SAMPLE=false
+
+# Bridge mode interfaces (auto-detected, can override)
+# AUTOGNN_BRIDGE_INTERFACES=br0,ens4,ens5
+
+# Syslog path (auto-detected, can override)
+# AUTOGNN_SYSLOG_PATH=/var/log/syslog
+
+# NetFlow directory
+# AUTOGNN_NETFLOW_DIR=/var/log/netflow/
+
+# DNS query log
+# AUTOGNN_DNS_LOG=/var/log/named/query.log
+
+# DHCP lease file
+# AUTOGNN_DHCP_LEASES=/var/lib/dhcp/dhcpd.leases
+
+# ─── GNN Training ─────────────────────────────────────────────
+# Minimum baselines before training
+# AUTOGNN_MIN_BASELINES=10
+
+# Auto-train threshold (0 = manual only, >0 = auto-train after N baselines)
+# AUTOGNN_AUTO_TRAIN=0
+
+# ─── Service User (for non-root deployments) ──────────────────
+# To run as unprivileged user, override in systemd:
+#   sudo systemctl edit autognn-ids
+#   [Service]
+#   User=autognn
+#   Group=autognn
+#   AmbientCapabilities=CAP_NET_RAW CAP_NET_ADMIN
+#
+# Then create the user:
+#   sudo useradd -r -s /bin/false autognn
+#   sudo chown -R autognn:autognn ${AUTOGNN_INSTALL_DIR}
+
+# ─── API & Dashboard ──────────────────────────────────────────
+# AUTOGNN_API_HOST=0.0.0.0
+# AUTOGNN_API_PORT=8000
+# AUTOGNN_DASHBOARD_PORT=8501
+
+# ─── Logging ───────────────────────────────────────────────────
+# Python unbuffered output (for real-time logging)
+PYTHONUNBUFFERED=1

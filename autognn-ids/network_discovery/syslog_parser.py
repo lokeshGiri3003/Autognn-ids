@@ -296,7 +296,126 @@ class SyslogParser:
             for ip, score in sorted(ip_risk.items(), key=lambda x: x[1], reverse=True)
         }
 
+    def sniff_security_packets(self, interfaces: list[str], timeout: int = 30) -> list[dict]:
+        """Sniff packets for security-related events in bridge mode.
+
+        Detects:
+        - SSH connection attempts (port 22)
+        - TCP connection resets (firewall blocks)
+        - Port scanning patterns
+        - Unusual traffic
+        """
+        try:
+            from scapy.all import sniff, IP, TCP, UDP
+        except ImportError:
+            logger.error("Scapy not installed. Cannot sniff security events.")
+            return []
+
+        events = []
+        port_attempts = defaultdict(lambda: defaultdict(int))  # src_ip -> dst_port -> count
+
+        def capture_packet(pkt):
+            """Callback to detect security-relevant packets."""
+            if IP not in pkt:
+                return
+
+            ip_layer = pkt[IP]
+            src_ip = ip_layer.src
+            dst_ip = ip_layer.dst
+
+            # Skip loopback
+            if src_ip.startswith("127.") or dst_ip.startswith("127."):
+                return
+
+            timestamp = datetime.utcnow().isoformat() + "Z"
+
+            if TCP in pkt:
+                tcp_layer = pkt[TCP]
+                dst_port = tcp_layer.dport
+                flags = tcp_layer.flags
+
+                # SSH attempt detection
+                if dst_port == 22:
+                    event_type = "ssh_connection_attempt"
+                    if flags & 0x01:  # SYN flag
+                        events.append({
+                            "type": event_type,
+                            "src_ip": src_ip,
+                            "dst_ip": dst_ip,
+                            "dst_port": dst_port,
+                            "severity": "low",
+                            "risk_score": 0.1,
+                            "timestamp": timestamp,
+                        })
+
+                # Connection reset (RST flag) - possible firewall drop
+                if flags & 0x04:  # RST flag
+                    events.append({
+                        "type": "connection_reset",
+                        "src_ip": src_ip,
+                        "dst_ip": dst_ip,
+                        "dst_port": dst_port,
+                        "severity": "medium",
+                        "risk_score": 0.3,
+                        "timestamp": timestamp,
+                    })
+
+                # Track port attempts for scanning detection
+                port_attempts[src_ip][dst_port] += 1
+
+        try:
+            # Sniff on all provided interfaces
+            for iface in interfaces:
+                try:
+                    logger.info(f"Sniffing security events on interface {iface} for {timeout}s")
+                    sniff(
+                        filter="tcp or udp",
+                        prn=capture_packet,
+                        timeout=timeout,
+                        iface=iface,
+                        store=False
+                    )
+                except (PermissionError, OSError) as e:
+                    logger.warning(f"Cannot sniff on {iface}: {e}. Requires root privileges.")
+                    continue
+
+            # Detect port scanning (many unique ports from same source)
+            for src_ip, ports in port_attempts.items():
+                if len(ports) > 20:  # Threshold for port scan
+                    events.append({
+                        "type": "port_scan",
+                        "src_ip": src_ip,
+                        "dst_ip": "*",
+                        "severity": "high",
+                        "risk_score": 0.7,
+                        "unique_ports": len(ports),
+                        "timestamp": datetime.utcnow().isoformat() + "Z",
+                    })
+
+            self.security_events = events
+            logger.info(f"Sniffed {len(events)} security events from {len(interfaces)} interfaces")
+            return events
+
+        except Exception as e:
+            logger.error(f"Security event sniffing error: {e}")
+            return []
+
     def discover(self) -> tuple[list, dict]:
-        """Run discovery: returns (security_events, suspicious_ips)."""
-        self.tail_syslog()
+        """Run discovery: returns (security_events, suspicious_ips).
+
+        In bridge mode: sniff packets for security events.
+        Otherwise: parse syslog file.
+        """
+        from config import DISCOVERY_CONFIG
+
+        # Bridge mode: sniff first
+        if DISCOVERY_CONFIG.get("syslog_sniff_enabled", False):
+            interfaces = DISCOVERY_CONFIG.get("sniff_interfaces", ["br0"])
+            timeout = DISCOVERY_CONFIG.get("sniff_timeout", 30)
+            logger.info(f"Bridge mode: sniffing security events on {interfaces}")
+            self.sniff_security_packets(interfaces, timeout=timeout)
+        else:
+            # Legacy: parse syslog file
+            self.tail_syslog()
+
         return self.security_events, self.get_suspicious_ips()

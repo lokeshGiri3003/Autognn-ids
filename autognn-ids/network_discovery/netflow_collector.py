@@ -90,6 +90,114 @@ class NetFlowCollector:
             logger.error(f"Error parsing {path}: {e}")
             return []
 
+    def sniff_traffic_flows(self, interfaces: list[str], timeout: int = 30) -> list[dict]:
+        """Sniff IP packets on bridge/physical interfaces to discover traffic flows.
+
+        This is the primary discovery method for bridge mode deployments.
+        Returns same format as parse_flow_directory for compatibility.
+        """
+        try:
+            from scapy.all import sniff, IP, TCP, UDP
+        except ImportError:
+            logger.error("Scapy not installed. Cannot sniff traffic flows.")
+            return []
+
+        flow_aggregation: dict[tuple, dict] = {}
+        packet_count = 0
+
+        def capture_packet(pkt):
+            """Callback to capture IP packets and aggregate into flows."""
+            nonlocal packet_count
+
+            if IP not in pkt:
+                return
+
+            packet_count += 1
+            ip_layer = pkt[IP]
+            src_ip = ip_layer.src
+            dst_ip = ip_layer.dst
+            protocol_num = ip_layer.proto  # 6=TCP, 17=UDP, etc.
+
+            # Map protocol number to name
+            protocol_map = {6: "tcp", 17: "udp", 1: "icmp", 0: "ip"}
+            protocol = protocol_map.get(protocol_num, f"proto_{protocol_num}")
+
+            # Extract ports if TCP or UDP
+            src_port = 0
+            dst_port = 0
+            if TCP in pkt:
+                src_port = pkt[TCP].sport
+                dst_port = pkt[TCP].dport
+            elif UDP in pkt:
+                src_port = pkt[UDP].sport
+                dst_port = pkt[UDP].dport
+
+            # Skip loopback and multicast
+            if src_ip.startswith("127.") or src_ip.startswith("224."):
+                return
+
+            # Create flow key (src, dst, protocol)
+            flow_key = (src_ip, dst_ip, protocol)
+
+            if flow_key not in flow_aggregation:
+                flow_aggregation[flow_key] = {
+                    "src_ip": src_ip,
+                    "dst_ip": dst_ip,
+                    "protocol": protocol,
+                    "bytes": 0,
+                    "packets": 0,
+                    "duration": 0,
+                    "src_port": src_port,
+                    "dst_port": dst_port,
+                    "ports": set(),
+                    "timestamp": datetime.utcnow().isoformat() + "Z",
+                }
+
+            flow = flow_aggregation[flow_key]
+            flow["bytes"] += len(pkt)
+            flow["packets"] += 1
+            flow["ports"].add(dst_port)
+
+        try:
+            # Sniff on all provided interfaces
+            for iface in interfaces:
+                try:
+                    logger.info(f"Sniffing traffic flows on interface {iface} for {timeout}s")
+                    sniff(
+                        filter="ip",
+                        prn=capture_packet,
+                        timeout=timeout,
+                        iface=iface,
+                        store=False  # Don't store packets in memory
+                    )
+                except (PermissionError, OSError) as e:
+                    logger.warning(f"Cannot sniff on {iface}: {e}. Requires root privileges.")
+                    continue
+
+            # Convert aggregated flows to NetFlow-compatible format
+            flows = []
+            for flow_key, flow_data in flow_aggregation.items():
+                flows.append({
+                    "src_ip": flow_data["src_ip"],
+                    "dst_ip": flow_data["dst_ip"],
+                    "protocol": flow_data["protocol"],
+                    "bytes": flow_data["bytes"],
+                    "packets": flow_data["packets"],
+                    "duration": flow_data["duration"],
+                    "src_port": flow_data["src_port"],
+                    "dst_port": flow_data["dst_port"],
+                    "timestamp": flow_data["timestamp"],
+                })
+
+            self.flows = flows
+            logger.info(f"Sniffed {len(flows)} traffic flows from {len(interfaces)} interfaces ({packet_count} packets)")
+            self._process_flows()
+            return flows
+
+        except Exception as e:
+            logger.error(f"Traffic sniffing error: {e}")
+            return []
+
     def _process_flows(self):
         """Process raw flows into edges and per-device traffic stats."""
         self.edges.clear()
@@ -208,6 +316,20 @@ class NetFlowCollector:
         return result
 
     def discover(self) -> tuple[list, dict]:
-        """Run discovery: returns (edges, device_traffic)."""
-        self.parse_flow_directory()
+        """Run discovery: returns (edges, device_traffic).
+
+        In bridge mode: sniff traffic flows on bridge interfaces.
+        Otherwise: parse NetFlow export files from directory.
+        """
+        from config import DISCOVERY_CONFIG
+
+        # Sniff-first approach for bridge mode
+        if DISCOVERY_CONFIG.get("netflow_sniff_enabled", False):
+            interfaces = DISCOVERY_CONFIG.get("sniff_interfaces", ["br0"])
+            timeout = DISCOVERY_CONFIG.get("sniff_timeout", 30)
+            self.sniff_traffic_flows(interfaces, timeout=timeout)
+        else:
+            # Legacy: parse NetFlow files from directory
+            self.parse_flow_directory()
+
         return self.edges, self.get_device_traffic()

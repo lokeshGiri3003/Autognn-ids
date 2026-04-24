@@ -594,27 +594,39 @@ class DHCPMonitor:
     def discover(self) -> tuple[dict, list, dict]:
         """
         Run discovery: returns (devices, threat_indicators, suspicious_clients).
+
+        In bridge mode: sniff DHCP packets on bridge interfaces (primary).
+        Otherwise: try lease files → log files → fallback to sniffing.
         """
-        # Try lease file first, then log file, then sniffing
-        lease_found = False
-        for key in ["dhcp_leases_isc", "dhcp_leases_dnsmasq"]:
-            if Path(LOG_PATHS.get(key, "")).exists():
-                self.parse_lease_file()
-                lease_found = True
-                break
+        from config import DISCOVERY_CONFIG
 
-        log_found = False
-        for key in ["dhcp_log", "dhcp_log_alt"]:
-            if Path(LOG_PATHS.get(key, "")).exists():
-                self.parse_log_file()
-                log_found = True
-                break
+        # Bridge mode: sniff first
+        if DISCOVERY_CONFIG.get("dhcp_bridge_sniff", False):
+            interfaces = DISCOVERY_CONFIG.get("sniff_interfaces", ["br0"])
+            timeout = DISCOVERY_CONFIG.get("dhcp_sniff_timeout", 30)
+            logger.info(f"Bridge mode: sniffing DHCP on {interfaces}")
+            self.sniff_dhcp(timeout=timeout, interface=interfaces[0])
+        else:
+            # Legacy: try lease file, then log file, then sniffing
+            lease_found = False
+            for key in ["dhcp_leases_isc", "dhcp_leases_dnsmasq"]:
+                if Path(LOG_PATHS.get(key, "")).exists():
+                    self.parse_lease_file()
+                    lease_found = True
+                    break
 
-        if not lease_found and not log_found:
-            logger.warning(
-                "No DHCP data source found. Attempting passive sniff "
-                "(requires root)..."
-            )
-            self.sniff_dhcp(timeout=30)
+            log_found = False
+            for key in ["dhcp_log", "dhcp_log_alt"]:
+                if Path(LOG_PATHS.get(key, "")).exists():
+                    self.parse_log_file()
+                    log_found = True
+                    break
+
+            if not lease_found and not log_found:
+                logger.warning(
+                    "No DHCP data source found. Attempting passive sniff "
+                    "(requires root)..."
+                )
+                self.sniff_dhcp(timeout=30)
 
         return self.get_devices(), self.threat_indicators, self.get_suspicious_clients()

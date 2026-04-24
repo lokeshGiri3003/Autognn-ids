@@ -175,14 +175,77 @@ class LLDPParser:
     def get_links(self) -> list:
         return self.links
 
+    def sniff_lldp_frames(self, interfaces: list[str], timeout: int = 30) -> list[dict]:
+        """Sniff LLDP frames on bridge interfaces.
+
+        Note: LLDP is typically between network infrastructure (switches/routers).
+        In a pure bridge mode deployment, you may see few or no LLDP frames.
+        """
+        try:
+            from scapy.all import sniff
+        except ImportError:
+            logger.error("Scapy not installed. Cannot sniff LLDP frames.")
+            return []
+
+        lldp_frames = []
+
+        def capture_lldp(pkt):
+            """Callback to capture LLDP frames (Ethernet type 0x88CC)."""
+            if pkt.type == 0x88CC:  # LLDP ethertype
+                lldp_frames.append({
+                    "src_mac": pkt.src,
+                    "dst_mac": pkt.dst,
+                    "timestamp": datetime.utcnow().isoformat() + "Z",
+                })
+
+        try:
+            # Sniff on all provided interfaces
+            for iface in interfaces:
+                try:
+                    logger.info(f"Sniffing LLDP on interface {iface} for {timeout}s")
+                    sniff(
+                        filter="ether proto 0x88cc",
+                        prn=capture_lldp,
+                        timeout=timeout,
+                        iface=iface,
+                        store=False
+                    )
+                except (PermissionError, OSError) as e:
+                    logger.warning(f"Cannot sniff on {iface}: {e}. Requires root privileges.")
+                    continue
+
+            self.neighbors = lldp_frames
+            logger.info(f"Sniffed {len(lldp_frames)} LLDP frames from {len(interfaces)} interfaces")
+            self._process_neighbors()
+            return lldp_frames
+
+        except Exception as e:
+            logger.error(f"LLDP sniffing error: {e}")
+            return []
+
     def discover(self) -> tuple[dict, list]:
-        """Run discovery: returns (devices, links)."""
-        # Try lldpcli JSON first, fall back to log parsing
-        if Path(LOG_PATHS["lldp_export"]).exists():
-            self.parse_lldpcli_json()
-        elif Path(LOG_PATHS["lldp_log"]).exists():
-            self.parse_log_file()
+        """Run discovery: returns (devices, links).
+
+        In bridge mode: sniff LLDP frames on bridge interfaces.
+        Otherwise: try lldpcli JSON export → log file.
+        """
+        from config import DISCOVERY_CONFIG
+
+        # Bridge mode: sniff first
+        if DISCOVERY_CONFIG.get("lldp_sniff_enabled", False):
+            interfaces = DISCOVERY_CONFIG.get("sniff_interfaces", ["br0"])
+            timeout = DISCOVERY_CONFIG.get("sniff_timeout", 30)
+            logger.info(f"Bridge mode: sniffing LLDP on {interfaces}")
+            # Note: Simple LLDP sniffing may not capture much in bridge mode
+            # since LLDP is typically between switch/router neighbors
+            self.sniff_lldp_frames(interfaces, timeout=timeout)
         else:
-            logger.warning("No LLDP data source available")
+            # Legacy: try lldpcli JSON first, fall back to log parsing
+            if Path(LOG_PATHS["lldp_export"]).exists():
+                self.parse_lldpcli_json()
+            elif Path(LOG_PATHS["lldp_log"]).exists():
+                self.parse_log_file()
+            else:
+                logger.warning("No LLDP data source available")
 
         return self.devices, self.links

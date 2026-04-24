@@ -532,20 +532,31 @@ class DNSMonitor:
         return stats
 
     def discover(self) -> tuple[list, dict]:
-        """Run discovery: returns (threat_indicators, suspicious_clients)."""
-        # Try log file first, then fall back to sniffing
-        log_found = False
-        for key in ["dns_query_log", "dns_dnsmasq_log", "dns_unbound_log"]:
-            if Path(LOG_PATHS.get(key, "")).exists():
-                self.parse_log_file()
-                log_found = True
-                break
+        """Run discovery: returns (threat_indicators, suspicious_clients).
 
-        if not log_found:
-            logger.warning(
-                "No DNS log file found. Attempting passive sniff "
-                "(requires root)..."
-            )
-            self.sniff_dns(timeout=DISCOVERY_CONFIG.get("dns_sniff_timeout", 10))
+        In bridge mode: sniff DNS packets on bridge interfaces (primary).
+        Otherwise: try log files → fallback to sniffing.
+        """
+        # Bridge mode: sniff first
+        if DISCOVERY_CONFIG.get("dns_bridge_sniff", False):
+            interfaces = DISCOVERY_CONFIG.get("sniff_interfaces", ["br0"])
+            timeout = DISCOVERY_CONFIG.get("dns_sniff_timeout", 10)
+            logger.info(f"Bridge mode: sniffing DNS on {interfaces}")
+            self.sniff_dns(timeout=timeout, interface=interfaces[0])
+        else:
+            # Legacy: try log files first, then fall back to sniffing
+            log_found = False
+            for key in ["dns_query_log", "dns_dnsmasq_log", "dns_unbound_log"]:
+                if Path(LOG_PATHS.get(key, "")).exists():
+                    self.parse_log_file()
+                    log_found = True
+                    break
+
+            if not log_found:
+                logger.warning(
+                    "No DNS log file found. Attempting passive sniff "
+                    "(requires root)..."
+                )
+                self.sniff_dns(timeout=DISCOVERY_CONFIG.get("dns_sniff_timeout", 10))
 
         return self.threat_indicators, self.get_suspicious_clients()

@@ -103,6 +103,77 @@ class ARPMonitor:
             logger.error(f"ARP command error: {e}")
             return []
 
+    def sniff_arp_packets(self, interfaces: list[str], timeout: int = 30) -> list[dict]:
+        """Sniff ARP packets on bridge/physical interfaces to discover devices.
+
+        This is the primary discovery method for bridge mode deployments.
+        Returns same format as parse_proc_arp/parse_arp_command for compatibility.
+        """
+        try:
+            from scapy.all import sniff, ARP
+        except ImportError:
+            logger.error("Scapy not installed. Cannot sniff ARP.")
+            return []
+
+        entries = []
+        seen_macs = set()
+
+        def capture_arp(pkt):
+            """Callback to capture ARP packets."""
+            if ARP not in pkt:
+                return
+
+            # ARP has operation: 1=request (who-has), 2=reply (is-at)
+            arp_layer = pkt[ARP]
+
+            # Both request and reply give us IP-MAC mappings
+            # psrc = sender protocol address (IP), hwsrc = sender hardware address (MAC)
+            src_ip = arp_layer.psrc
+            src_mac = arp_layer.hwsrc.upper()
+
+            # Skip broadcast/zero addresses
+            if src_mac == "00:00:00:00:00:00" or src_ip == "0.0.0.0":
+                return
+
+            # Deduplicate
+            if src_mac in seen_macs:
+                return
+
+            seen_macs.add(src_mac)
+            entries.append({
+                "ip": src_ip,
+                "mac": src_mac,
+                "device": "sniffed",
+                "type": "dynamic",
+                "hostname": "",
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+            })
+
+        try:
+            # Sniff on all provided interfaces
+            for iface in interfaces:
+                try:
+                    logger.info(f"Sniffing ARP on interface {iface} for {timeout}s")
+                    sniff(
+                        filter="arp",
+                        prn=capture_arp,
+                        timeout=timeout,
+                        iface=iface,
+                        store=False  # Don't store packets in memory
+                    )
+                except (PermissionError, OSError) as e:
+                    logger.warning(f"Cannot sniff on {iface}: {e}. Requires root privileges.")
+                    continue
+
+            self.entries = entries
+            logger.info(f"Sniffed {len(entries)} ARP entries from {len(interfaces)} interfaces")
+            self._process_entries()
+            return entries
+
+        except Exception as e:
+            logger.error(f"ARP sniffing error: {e}")
+            return []
+
     def _process_entries(self):
         """Process ARP entries into device records with vendor lookup."""
         for entry in self.entries:
@@ -164,11 +235,23 @@ class ARPMonitor:
         return self.new_devices
 
     def discover(self) -> dict:
-        """Run discovery: returns devices dict."""
-        # Try /proc/net/arp first, fall back to arp command
-        if Path(LOG_PATHS["arp"]).exists():
-            self.parse_proc_arp()
+        """Run discovery: returns devices dict.
+
+        In bridge mode: sniff ARP packets on bridge interfaces.
+        Otherwise: try /proc/net/arp, fall back to arp command.
+        """
+        from config import DISCOVERY_CONFIG
+
+        # Sniff-first approach for bridge mode
+        if DISCOVERY_CONFIG.get("arp_sniff_enabled", False):
+            interfaces = DISCOVERY_CONFIG.get("sniff_interfaces", ["br0"])
+            timeout = DISCOVERY_CONFIG.get("sniff_timeout", 30)
+            self.sniff_arp_packets(interfaces, timeout=timeout)
         else:
-            self.parse_arp_command()
+            # Legacy: Try /proc/net/arp first, fall back to arp command
+            if Path(LOG_PATHS["arp"]).exists():
+                self.parse_proc_arp()
+            else:
+                self.parse_arp_command()
 
         return self.devices

@@ -37,8 +37,29 @@ LOG_PATHS = {
 # ─── Database ─────────────────────────────────────────────────
 SQLITE_DB_PATH = DB_DIR / "autognn_ids.db"
 
+# ─── Bridge Mode Detection ────────────────────────────────────
+def _is_bridge_mode() -> bool:
+    """Auto-detect if running in bridge mode (br0 interface exists)."""
+    return Path("/sys/class/net/br0").exists()
+
+BRIDGE_MODE = _is_bridge_mode()
+
 # ─── Network Discovery ───────────────────────────────────────
 DISCOVERY_CONFIG = {
+    # Bridge mode configuration
+    "bridge_mode": BRIDGE_MODE,
+    "sniff_interfaces": ["br0", "ens4", "ens5"],  # Interfaces to sniff on
+    "sniff_timeout": 30,                           # seconds per snapshot for sniffing
+
+    # Per-module sniffing flags (auto-enable in bridge mode)
+    "arp_sniff_enabled": BRIDGE_MODE,
+    "dns_bridge_sniff": BRIDGE_MODE,
+    "dhcp_bridge_sniff": BRIDGE_MODE,
+    "netflow_sniff_enabled": BRIDGE_MODE,
+    "lldp_sniff_enabled": BRIDGE_MODE,
+    "syslog_sniff_enabled": BRIDGE_MODE,
+
+    # Legacy log-based discovery intervals (fallback when sniffing unavailable)
     "arp_poll_interval": 10,       # seconds between ARP table reads
     "syslog_tail_interval": 1,     # seconds between syslog checks
     "netflow_watch_interval": 5,   # seconds between netflow dir scans
