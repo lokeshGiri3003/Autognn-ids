@@ -5,49 +5,27 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-
-# Allow configuration via environment file for portability
-# Usage: echo "AUTOGNN_INSTALL_DIR=/path/to/autognn-ids" > /etc/autognn-ids/autognn-ids.conf
-# Or set AUTOGNN_INSTALL_DIR environment variable before starting
-EnvironmentFile=-/etc/autognn-ids/autognn-ids.conf
-EnvironmentFile=-/home/%u/.autognn-ids/autognn-ids.conf
-
-# Default installation directory (can be overridden via EnvironmentFile)
-Environment="AUTOGNN_INSTALL_DIR=/opt/autognn-ids"
-Environment="AUTOGNN_USE_SAMPLE=false"
-
-# Dynamic paths using installation directory variable
-WorkingDirectory=${AUTOGNN_INSTALL_DIR}
-Environment="PATH=${AUTOGNN_INSTALL_DIR}/.venv/bin:/usr/local/bin:/usr/bin:/bin"
-Environment="PYTHONUNBUFFERED=1"
-
-# Try venv python first, fall back to system python
-ExecStart=bash -c 'if [ -f "${AUTOGNN_INSTALL_DIR}/.venv/bin/python" ]; then \
-  exec "${AUTOGNN_INSTALL_DIR}/.venv/bin/python" main.py; \
-else \
-  exec python3 main.py; \
-fi'
-
-# Allow running as root OR unprivileged user
-# For network monitoring (packet sniffing), root or CAP_NET_RAW is recommended
-# Set to unprivileged user for sandboxing (e.g., User=autognn)
 User=root
 Group=root
 
-# Process management
+#edit the location if the WorkingDirectory is different than below
+WorkingDirectory=/root/Autognn-ids/autognn-ids
+Environment="PATH=/root/Autognn-ids/autognn-ids/.venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="AUTOGNN_USE_SAMPLE=false"
+ExecStart=/opt/autognn-ids/.venv/bin/python -m uvicorn api.fastapi_server:app --host 0.0.0.0 --port 8000
 Restart=on-failure
 RestartSec=10
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=autognn-ids
 
-# Allow packet sniffing (CAP_NET_RAW for Scapy)
-# Comment out to run as unprivileged user (reduced functionality)
-AmbientCapabilities=CAP_NET_RAW CAP_NET_ADMIN
-CapabilityBoundingSet=CAP_NET_RAW CAP_NET_ADMIN
-
 # Security hardening
 NoNewPrivileges=false
+ProtectSystem=false
+ReadOnlyDirectories=/proc/net
+
+[Install]
+WantedBy=multi-user.target
 ProtectSystem=false
 ProtectHome=false
 ReadOnlyDirectories=/proc/net
