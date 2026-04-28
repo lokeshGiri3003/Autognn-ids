@@ -212,6 +212,21 @@ def run_training_mode(state: dict) -> dict:
     state["detection_cycles"] = 0
     state["total_alerts"] = 0
 
+    # Clear stored baseline snapshots now that training completed
+    baseline_dir = MODEL_DIR / "baselines"
+    if baseline_dir.exists():
+        try:
+            import shutil
+            shutil.rmtree(baseline_dir)
+            baseline_dir.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            logger.warning("Failed to clear baseline files after training")
+
+    # Reset baseline counters in state
+    state["baseline_count"] = 0
+    state["baseline_start_time"] = None
+    state["baseline_stop_time"] = None
+
     logger.info(
         f"Training complete! "
         f"Loss: {state['training_loss']}, "
@@ -291,6 +306,21 @@ def run_upgrading_mode(state: dict) -> dict:
         f"Threshold: {state['threshold']}. "
         f"Switching to detection mode."
     )
+
+    # Clear stored baseline snapshots now that upgrading completed
+    baseline_dir = MODEL_DIR / "baselines"
+    if baseline_dir.exists():
+        try:
+            import shutil
+            shutil.rmtree(baseline_dir)
+            baseline_dir.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            logger.warning("Failed to clear baseline files after upgrading")
+
+    # Reset baseline counters in state
+    state["baseline_count"] = 0
+    state["baseline_start_time"] = None
+    state["baseline_stop_time"] = None
 
     return state
 
