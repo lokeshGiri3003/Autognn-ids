@@ -21,6 +21,7 @@ Usage:
 import json
 import sys
 import os
+import time
 from pathlib import Path
 from datetime import datetime
 
@@ -238,6 +239,48 @@ def cmd_train(model_name: str = None):
     print("   Check progress with:")
     print("     python autognn_ctl.py status")
     print()
+
+    # Tail engine log and poll state until training completes
+    log_path = PROJECT_ROOT / "autognn_ids.log"
+    last_pos = 0
+    print("Waiting for training to complete (press Ctrl-C to cancel)...")
+    try:
+        while True:
+            state = load_state()
+            mode = state.get("mode", "stopped")
+
+            # Print any new log lines
+            try:
+                if log_path.exists():
+                    with open(log_path, "r") as lf:
+                        lf.seek(last_pos)
+                        new = lf.read()
+                        if new:
+                            print(new, end="")
+                            last_pos = lf.tell()
+            except Exception:
+                pass
+
+            if mode != "training":
+                break
+
+            time.sleep(2)
+    except KeyboardInterrupt:
+        print("\nCancelled waiting for training.")
+        return
+
+    # Show final training summary
+    state = load_state()
+    if state.get("mode") == "detection":
+        print("\n✅ Training complete!")
+        print(f"  Last trained:      {state.get('last_trained')}")
+        print(f"  Training loss:     {state.get('training_loss', 'N/A')}")
+        print(f"  Threshold:         {state.get('threshold', 'N/A')}")
+        print(f"  Model path:        {state.get('model_path', 'N/A')}")
+        print(f"  Epochs trained:    {state.get('training_epochs', 'N/A')}")
+        print(f"  Duration (s):      {state.get('training_duration', 'N/A')}")
+    else:
+        print("\nTraining did not complete successfully. Check logs for details.")
 
 
 def cmd_upgrade(model_name: str = None):
