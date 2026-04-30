@@ -165,6 +165,18 @@ def cmd_baseline_stop():
     state["baseline_stop_time"] = datetime.utcnow().isoformat() + "Z"
     save_state(state)
 
+    # Verify the stop took effect (guard against main.py race condition)
+    for attempt in range(3):
+        time.sleep(0.5)
+        verify = load_state()
+        if verify.get("mode") != "stopped":
+            # main.py overwrote it — write again
+            verify["mode"] = "stopped"
+            verify["baseline_stop_time"] = state["baseline_stop_time"]
+            save_state(verify)
+        else:
+            break
+
     count = state.get("baseline_count", 0)
     min_needed = TRAINING_CONFIG["min_baseline_snapshots"]
 
@@ -210,13 +222,22 @@ def cmd_train(model_name: str = None):
     """Train the model on collected baselines."""
     state = load_state()
 
-    if state["mode"] == "baseline":
-        print("⚠️  Stop baseline collection first:")
-        print("     python autognn_ctl.py baseline stop")
-        return
-
     count = state.get("baseline_count", 0)
     min_needed = TRAINING_CONFIG["min_baseline_snapshots"]
+
+    if state["mode"] == "baseline":
+        if count >= min_needed:
+            print(f"⚠️  Auto-stopping baseline collection ({count} snapshots collected)...")
+            state["mode"] = "stopped"
+            state["baseline_stop_time"] = datetime.utcnow().isoformat() + "Z"
+            save_state(state)
+            time.sleep(1)  # Give main.py a moment to notice
+            state = load_state()  # Re-read after stop
+        else:
+            print("⚠️  Stop baseline collection first:")
+            print("     python autognn_ctl.py baseline stop")
+            print(f"   (Only {count}/{min_needed} snapshots so far)")
+            return
 
     if count < min_needed:
         print(f"❌ Not enough baseline data: {count}/{min_needed}")

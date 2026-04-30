@@ -101,9 +101,31 @@ def run_baseline_mode(topology: TopologyBuilder, state: dict) -> dict:
     """Collect one baseline snapshot."""
     logger.info("Baseline mode: collecting snapshot...")
 
+    # Check if mode was changed externally before doing work
+    fresh = load_state()
+    if fresh.get("mode") != "baseline":
+        logger.info(f"Mode changed externally to '{fresh.get('mode')}', aborting baseline snapshot")
+        return fresh
+
     # Run network discovery
     topology.run_discovery()
     snapshot = topology.get_snapshot()
+
+    # Re-check mode after the long discovery operation
+    fresh = load_state()
+    if fresh.get("mode") != "baseline":
+        logger.info(
+            f"Mode changed to '{fresh.get('mode')}' during discovery. "
+            f"Snapshot collected but respecting new mode."
+        )
+        # Still save the snapshot (data is valid) but keep the new mode
+        count = fresh.get("baseline_count", 0) + 1
+        save_baseline(snapshot, count)
+        fresh["baseline_count"] = count
+        fresh["last_snapshot_time"] = datetime.utcnow().isoformat() + "Z"
+        fresh["last_snapshot_nodes"] = snapshot.get("node_count", 0)
+        fresh["last_snapshot_edges"] = snapshot.get("edge_count", 0)
+        return fresh
 
     # Save the snapshot
     count = state.get("baseline_count", 0) + 1
@@ -427,6 +449,7 @@ def main():
                 save_state(state)
 
             elif mode == "training":
+                logger.info("Main loop detected training mode, starting training...")
                 state = run_training_mode(state)
                 save_state(state)
 
@@ -439,6 +462,7 @@ def main():
                     explainer = AttackExplainer(model, feature_extractor)
 
             elif mode == "upgrading":
+                logger.info("Main loop detected upgrading mode, starting upgrade...")
                 state = run_upgrading_mode(state)
                 save_state(state)
 
